@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 class WorkflowState(TypedDict):
     current_node_id: str
     workflow_data: Dict[str, Any]
-    user_response_detected: bool
     context: Dict[str, Any]
     history: List[str]
 
