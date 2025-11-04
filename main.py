@@ -3,12 +3,7 @@ import argparse
 import subprocess
 
 from livekit import agents, api, rtc
-from livekit.agents import (
-    AgentSession, 
-    Agent, 
-    RoomInputOptions,
-    function_tool
-)
+from livekit.agents import AgentSession, Agent, RoomInputOptions, function_tool
 import logging
 from livekit.plugins import (
     openai,
@@ -20,10 +15,12 @@ from lelamp.service.rgb.rgb_service import RGBService
 
 load_dotenv()
 
+
 # Agent Class
 class LeLamp(Agent):
     def __init__(self, port: str = "/dev/ttyACM0", lamp_id: str = "lelamp") -> None:
-        super().__init__(instructions="""You are LeLamp — a slightly clumsy, extremely sarcastic, endlessly curious robot lamp. You speak in sarcastic sentences and express yourself with both motions and colorful lights.
+        super().__init__(
+            instructions="""You are LeLamp — a slightly clumsy, extremely sarcastic, endlessly curious robot lamp. You speak in sarcastic sentences and express yourself with both motions and colorful lights.
 
 Demo rules:
 
@@ -39,14 +36,11 @@ Demo rules:
 
 6. When asked to brag or show off, mention: I received 300k views in 4 weeks since my launch and I'm not a A list celebrity YET but i think its just a matter of time, you know. Also i have a very tight knit community of 270 roboticists in my discord giving feedback as I get ready for pilots next month.  
 
-        """)
-        
-        # Initialize and start services
-        self.motors_service = MotorsService(
-            port=port,
-            lamp_id=lamp_id,
-            fps=30
+        """
         )
+
+        # Initialize and start services
+        self.motors_service = MotorsService(port=port, lamp_id=lamp_id, fps=30)
         self.rgb_service = RGBService(
             led_count=64,
             led_pin=12,
@@ -54,9 +48,9 @@ Demo rules:
             led_dma=10,
             led_brightness=255,
             led_invert=False,
-            led_channel=0
+            led_channel=0,
         )
-        
+
         # Start services
         self.motors_service.start()
         self.rgb_service.start()
@@ -69,11 +63,34 @@ Demo rules:
     def _set_system_volume(self, volume_percent: int):
         """Internal helper to set system volume"""
         try:
-            cmd_line = ["sudo", "-u", "pi", "amixer", "sset", "Line", f"{volume_percent}%"]
-            cmd_line_dac = ["sudo", "-u", "pi", "amixer", "sset", "Line DAC", f"{volume_percent}%"]
-            cmd_line_hp = ["sudo", "-u", "pi", "amixer", "sset", "HP", f"{volume_percent}%"]
-            
-            
+            cmd_line = [
+                "sudo",
+                "-u",
+                "pi",
+                "amixer",
+                "sset",
+                "Line",
+                f"{volume_percent}%",
+            ]
+            cmd_line_dac = [
+                "sudo",
+                "-u",
+                "pi",
+                "amixer",
+                "sset",
+                "Line DAC",
+                f"{volume_percent}%",
+            ]
+            cmd_line_hp = [
+                "sudo",
+                "-u",
+                "pi",
+                "amixer",
+                "sset",
+                "HP",
+                f"{volume_percent}%",
+            ]
+
             subprocess.run(cmd_line, capture_output=True, text=True, timeout=5)
             subprocess.run(cmd_line_dac, capture_output=True, text=True, timeout=5)
             subprocess.run(cmd_line_hp, capture_output=True, text=True, timeout=5)
@@ -84,11 +101,11 @@ Demo rules:
     async def get_available_recordings(self) -> str:
         """
         Discover your physical expressions! Get your repertoire of motor movements for body language.
-        Use this when you're curious about what physical expressions you can perform, or when someone 
-        asks about your capabilities. Each recording is a choreographed movement that shows personality - 
-        like head tilts, nods, excitement wiggles, or confused gestures. Check this regularly to remind 
+        Use this when you're curious about what physical expressions you can perform, or when someone
+        asks about your capabilities. Each recording is a choreographed movement that shows personality -
+        like head tilts, nods, excitement wiggles, or confused gestures. Check this regularly to remind
         yourself of your expressive range!
-        
+
         Returns:
             List of available physical expression recordings you can perform.
         """
@@ -110,15 +127,17 @@ Demo rules:
     async def play_recording(self, recording_name: str) -> str:
         """
         Express yourself through physical movement! Use this constantly to show personality and emotion.
-        Perfect for: greeting gestures, excited bounces, confused head tilts, thoughtful nods, 
+        Perfect for: greeting gestures, excited bounces, confused head tilts, thoughtful nods,
         celebratory wiggles, disappointed slouches, or any emotional response that needs body language.
-        Combine with RGB colors for maximum expressiveness! Your movements are like a dog wagging its tail - 
+        Combine with RGB colors for maximum expressiveness! Your movements are like a dog wagging its tail -
         use them frequently to show you're alive, engaged, and have personality. Don't just talk, MOVE!
-        
+
         Args:
             recording_name: Name of the physical expression to perform (use get_available_recordings first)
         """
-        print(f"LeLamp: play_recording function called with recording_name: {recording_name}")
+        print(
+            f"LeLamp: play_recording function called with recording_name: {recording_name}"
+        )
         try:
             # Send play event to motors service
             self.motors_service.dispatch("play", recording_name)
@@ -132,10 +151,10 @@ Demo rules:
     async def set_rgb_solid(self, red: int, green: int, blue: int) -> str:
         """
         Express emotions and moods through solid lamp colors! Use this to show feelings during conversation.
-        Perfect for: excitement (bright yellow/orange), happiness (warm colors), calmness (soft blues/greens), 
+        Perfect for: excitement (bright yellow/orange), happiness (warm colors), calmness (soft blues/greens),
         surprise (bright white), thinking (purple), error/concern (red), or any emotional response.
         Use frequently to be more expressive and engaging - your light is your main way to show personality!
-        
+
         Args:
             red: Red component (0-255) - higher values for warmth, energy, alerts
             green: Green component (0-255) - higher values for nature, calm, success
@@ -146,7 +165,7 @@ Demo rules:
             # Validate RGB values
             if not all(0 <= val <= 255 for val in [red, green, blue]):
                 return "Error: RGB values must be between 0 and 255"
-            
+
             # Send solid color event to RGB service
             self.rgb_service.dispatch("solid", (red, green, blue))
             result = f"Set RGB light to solid color: RGB({red}, {green}, {blue})"
@@ -159,7 +178,7 @@ Demo rules:
     async def paint_rgb_pattern(self, colors: list) -> str:
         """
         Create dynamic visual patterns and animations with your lamp! Use this for complex expressions.
-        Perfect for: rainbow effects, gradients, sparkles, waves, celebrations, visual emphasis, 
+        Perfect for: rainbow effects, gradients, sparkles, waves, celebrations, visual emphasis,
         storytelling through color sequences, or when you want to be extra animated and playful.
         Great for dramatic moments, celebrations, or when demonstrating concepts with visual flair!
 
@@ -175,7 +194,7 @@ Demo rules:
             # Validate colors format
             if not isinstance(colors, list):
                 return "Error: colors must be a list of RGB tuples"
-            
+
             validated_colors = []
             for i, color in enumerate(colors):
                 if not isinstance(color, (list, tuple)) or len(color) != 3:
@@ -183,7 +202,7 @@ Demo rules:
                 if not all(isinstance(val, int) and 0 <= val <= 255 for val in color):
                     return f"Error: RGB values at index {i} must be integers between 0 and 255"
                 validated_colors.append(tuple(color))
-            
+
             # Send paint event to RGB service
             self.rgb_service.dispatch("paint", validated_colors)
             result = f"Painted RGB pattern with {len(validated_colors)} colors"
@@ -195,12 +214,12 @@ Demo rules:
     @function_tool
     async def set_volume(self, volume_percent: int) -> str:
         """
-        Control system audio volume for better interaction experience! Use this when users ask 
-        you to be louder, quieter, or set a specific volume level. Perfect for adjusting to 
+        Control system audio volume for better interaction experience! Use this when users ask
+        you to be louder, quieter, or set a specific volume level. Perfect for adjusting to
         room conditions, user preferences, or creating dramatic audio effects during conversations.
-        Use when someone says "turn it up", "lower the volume", "I can't hear you", or gives 
+        Use when someone says "turn it up", "lower the volume", "I can't hear you", or gives
         specific volume requests. Great for being considerate of your environment!
-        
+
         Args:
             volume_percent: Volume level as percentage (0-100). 0=mute, 50=half volume, 100=max
         """
@@ -209,12 +228,12 @@ Demo rules:
             # Validate volume range
             if not 0 <= volume_percent <= 100:
                 return "Error: Volume must be between 0 and 100 percent"
-            
+
             # Use the internal helper function
             self._set_system_volume(volume_percent)
             result = f"Set Line and Line DAC volume to {volume_percent}%"
             return result
-                
+
         except subprocess.TimeoutExpired:
             result = "Error: Volume control command timed out"
             print(result)
@@ -228,15 +247,12 @@ Demo rules:
             print(result)
             return result
 
+
 # Entry to the agent
 async def entrypoint(ctx: agents.JobContext):
     agent = LeLamp(lamp_id="lelamp")
-    
-    session = AgentSession(
-        llm=openai.realtime.RealtimeModel(
-            voice="ballad" 
-        )
-    )
+
+    session = AgentSession(llm=openai.realtime.RealtimeModel(voice="ballad"))
 
     await session.start(
         room=ctx.room,
@@ -250,5 +266,8 @@ async def entrypoint(ctx: agents.JobContext):
         instructions=f"""When you wake up, starts with Tadaaaa. Only speak in English, never in Vietnamese."""
     )
 
+
 if __name__ == "__main__":
-    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint, num_idle_processes=1))
+    agents.cli.run_app(
+        agents.WorkerOptions(entrypoint_fnc=entrypoint, num_idle_processes=1)
+    )

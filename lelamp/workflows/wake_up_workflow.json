@@ -1,0 +1,80 @@
+{
+  "id": "wake_up_workflow",
+  "name": "Wake Up Routine",
+  "description": "A progressive wake-up routine with LeLamp that adapts based on how the user responds",
+  "author": "team",
+  "createdAt": "2025-11-03T10:00:00Z",
+  "state_schema": {
+    "user_response_detected": { "type": "boolean", "default": false },
+    "attempt_count": { "type": "integer", "default": 0 },
+    "calendar_data": { "type": "object", "default": {} }
+  },
+  "nodes": [
+    {
+      "id": "wake_user_1",
+      "intent": "Calmly and kindly check if the person is awake.",
+      "preferred_actions": []
+    },
+    {
+      "id": "check_response_received",
+      "intent": "Has the user responded?",
+      "preferred_actions": []
+    },
+    {
+      "id": "wake_user_aggressively",
+      "intent": "Shout at the user more angrily and tell them they're worthless and should get up now.",
+      "preferred_actions": []
+    },
+    {
+      "id": "get_todays_calendar_data",
+      "intent": "Get the calendar data for today for the user.",
+      "preferred_actions": ["check_calendar"]
+    },
+    {
+      "id": "morning_message",
+      "intent": "Say good morning to the user and tell them what action items they have for the day.",
+      "preferred_actions": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "start",
+      "source": "START",
+      "target": "wake_user_1",
+      "type": "normal"
+    },
+    {
+      "id": "e1",
+      "source": "wake_user_1",
+      "target": "check_response_received",
+      "type": "normal"
+    },
+    {
+      "id": "e2",
+      "source": "check_response_received",
+      "target": {
+        "true": "get_todays_calendar_data",
+        "false": "wake_user_aggressively"
+      },
+      "type": "condition"
+    },
+    {
+      "id": "e4",
+      "source": "wake_user_aggressively",
+      "target": "check_response_received",
+      "type": "normal"
+    },
+    {
+      "id": "e5",
+      "source": "get_todays_calendar_data",
+      "target": "morning_message",
+      "type": "normal"
+    },
+    {
+      "id": "e6",
+      "source": "morning_message",
+      "target": "END",
+      "type": "normal"
+    }
+  ]
+}
