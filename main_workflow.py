@@ -250,18 +250,97 @@ Demo rules:
             return result
         
     @function_tool
-    async def get_available_workflows(self, workflow_name: str) -> str:
+    async def get_available_workflows(self) -> str:
         """
+        Discover what workflows you can execute! Get your repertoire of user-defined step workflows.
+        Use this when someone asks you about your capabilities or when they ask you to execute a workflow.
+        Each workflow is a user-defined graph or general instructions -
+        like waking up the user, playing a specific game, or sending some specific messages. 
 
+        Returns:
+            List of available workflow names you can execute.
         """
-        
+        print("LeLamp: get_available_recordings function called")
+        try:
+            recordings = self.workflow_service.get_available_workflows()
+
+            if recordings:
+                result = f"Available recordings: {', '.join(recordings)}"
+                return result
+            else:
+                result = "No recordings found."
+                return result
+        except Exception as e:
+            result = f"Error getting recordings: {str(e)}"
+            return result
+
     @function_tool
     async def start_workflow(self, workflow_name: str) -> str:
+        f"""
+        Start a workflow called {workflow_name}. This sets the workflow_service's active workflow.
+        In order to perform the workflow you will need to iteratively call the get_next_step function until the workflow is complete.
+        
+        Args:
+            workflow_name: Name of the workflow to start. Check the available workflows with the get_available_workflows function first.
+        """
+        print(
+            f"LeLamp: start_workflow function called with workflow_name: {workflow_name}"
+        )
+        try:
+            self.workflow_service.start_workflow(workflow_name)
+            return f"Started the workflow: {workflow_name}. You can now call the get_next_step function to get the next step."
+        except Exception as e:
+            result = f"Error starting workflow {workflow_name}: {str(e)}"
+            return result
 
+    @function_tool
+    async def get_next_step(self) -> str:
+        f"""
+        Get the next step in the currently active workflow which is currently {self.workflow_service.active_workflow}.
+        If there is no active workflow you should not call this tool. Once you have completed the instructions of this step,
+        call the get_next_step function again to get the next step until the workflow is complete. 
+        
+        Returns:
+            Your next instruction to perform, written in plain language, possibly with some suggested tools to use.
+        """
+        print(f"LeLamp: calling get_next_step function on the {self.workflow_service.active_workflow} workflow")
+        try:
+            if self.workflow_service.active_workflow is None:
+                return "Error: No active workflow"
+            next_step = self.workflow_service.get_next_step()
+            return f"Next step: {next_step}"
+        except Exception as e:
+            result = f"Error getting next step: {str(e)}"
+            return result
 
-    async def get_next_step(self, workflow_name: str) -> str:
-
-        return self.workflow_service.get_next_step(workflow_name)
+    # TODO: Add relevant parameters to the function to get the calendar data from the user's calendar.
+    @function_tool
+    async def get_dummy_calendar_data(self) -> str:
+        f"""
+        Get dummy calendar data for the user. Call this function when you need to get the calendar data for the user. 
+        """
+        print("LeLamp: calling get_dummy_calendar_data function")
+        try:
+            return {
+                "calendar_data": {
+                    "events": [
+                        {
+                            "title": "Meeting with John",
+                            "start_time": "2025-11-04T10:00:00Z",
+                            "end_time": "2025-11-04T11:00:00Z"
+                        },
+                        {
+                            "title": "Hot Yoga Session",
+                            "start_time": "2025-11-04T12:00:00Z",
+                            "end_time": "2025-11-04T13:00:00Z"
+                        },
+                    ]
+                }
+            }
+        except Exception as e:
+            result = f"Error getting dummy calendar data: {str(e)}"
+            return result
+        
 
 
 

@@ -15,5 +15,5 @@ class WorkflowService:
     def generate_workflow_graph(self, workflow_name: str):
         return self.workflows[workflow_name]
 
-    def get_next_step(self, workflow_name: str):
+    def get_next_step(self):
         return self.workflows[workflow_name]["next_step"]
