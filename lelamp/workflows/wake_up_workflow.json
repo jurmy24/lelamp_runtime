@@ -52,6 +52,7 @@
     {
       "id": "e2",
       "source": "check_response_received",
+      "state_key": "user_response_detected",
       "target": {
         "true": "get_todays_calendar_data",
         "false": "wake_user_aggressively"

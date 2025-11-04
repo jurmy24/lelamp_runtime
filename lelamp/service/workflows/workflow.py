@@ -33,6 +33,7 @@ class Workflow:
     createdAt: str
     state_schema: Dict[str, StateVariable]
     nodes: Dict[str, Node]  # Indexed by node ID for O(1) lookup
+    # TODO: this doesn't need to be a list based on our current implementation, where a conditional edge has multiple target edges depending on the condition
     edges: Dict[str, List[Edge]]  # Indexed by source node for fast traversal
     
     @classmethod
