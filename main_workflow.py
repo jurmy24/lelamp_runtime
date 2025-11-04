@@ -53,6 +53,9 @@ Demo rules:
             led_channel=0,
         )
 
+        # Initialize workflow service
+        self.workflow_service = WorkflowService()
+
         # Start services
         self.motors_service.start()
         self.rgb_service.start()
@@ -61,6 +64,16 @@ Demo rules:
         self.motors_service.dispatch("play", "wake_up")
         self.rgb_service.dispatch("solid", (255, 255, 255))
         self._set_system_volume(100)
+        
+        # Register tools with workflow service
+        # Map workflow action names to agent tool methods
+        tool_mapping = {
+            "check_calendar": "get_dummy_calendar_data",
+            # Add more tool mappings as needed:
+            # "play_music": "play_music",
+            # "spotify_api": "call_spotify_api",
+        }
+        self.workflow_service.auto_register_agent_tools(self, tool_mapping)
 
     def _set_system_volume(self, volume_percent: int):
         """Internal helper to set system volume"""
@@ -260,18 +273,18 @@ Demo rules:
         Returns:
             List of available workflow names you can execute.
         """
-        print("LeLamp: get_available_recordings function called")
+        print("LeLamp: get_available_workflows function called")
         try:
-            recordings = self.workflow_service.get_available_workflows()
+            workflows = self.workflow_service.get_available_workflows()
 
-            if recordings:
-                result = f"Available recordings: {', '.join(recordings)}"
+            if workflows:
+                result = f"Available workflows: {', '.join(workflows)}"
                 return result
             else:
-                result = "No recordings found."
+                result = "No workflows found."
                 return result
         except Exception as e:
-            result = f"Error getting recordings: {str(e)}"
+            result = f"Error getting workflows: {str(e)}"
             return result
 
     @function_tool
@@ -306,9 +319,13 @@ Demo rules:
         print(f"LeLamp: calling get_next_step function on the {self.workflow_service.active_workflow} workflow")
         try:
             if self.workflow_service.active_workflow is None:
-                return "Error: No active workflow"
+                return "Error: No active workflow. Call start_workflow first."
+            
             next_step = self.workflow_service.get_next_step()
-            return f"Next step: {next_step}"
+            if next_step is None:
+                return "Workflow complete! No more steps."
+            
+            return next_step
         except Exception as e:
             result = f"Error getting next step: {str(e)}"
             return result
