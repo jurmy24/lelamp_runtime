@@ -62,20 +62,29 @@ class WorkflowService:
             
             starting_node_id = starting_edge.target
             self.current_node = self.workflow_graph.nodes[starting_node_id]
+            print(f"[WORKFLOW] Starting workflow at node: {starting_node_id}")
             
         # Build comprehensive step information
-        step_info = f"Step: {self.current_node.intent}"
+        print(f"[WORKFLOW] Current node: {self.current_node.id}")
+        print(f"[WORKFLOW] Current state: {self.state}")
+        
+        step_info = f"═══ CURRENT STEP ═══\n"
+        step_info += f"Node ID: {self.current_node.id}\n"
+        step_info += f"Intent: {self.current_node.intent}\n"
         
         if self.current_node.preferred_actions:
-            step_info += f"\nPreferred tools to use: {', '.join(self.current_node.preferred_actions)}"
+            step_info += f"\n⚠️ REQUIRED ACTIONS:\n"
+            for action in self.current_node.preferred_actions:
+                step_info += f"  • You MUST call: {action}\n"
         
-        # TODO: Think about how to best share this data with the LLM 
-        # Show relevant state variables that can be updated
+        # Show state info more clearly
         if self.workflow_graph.state_schema:
-            step_info += f"\nAvailable state variables you could update after executing this step. Only update the ones that are relevant to the current step:"
+            step_info += f"\nState variables (update via complete_step if needed):\n"
             for key, var in self.workflow_graph.state_schema.items():
                 current_value = self.state.get(key)
-                step_info += f"\n  - {key} (type: {var.type}, current: {current_value})"
+                step_info += f"  • {key}: {current_value} (type: {var.type})\n"
+        
+        step_info += "═══════════════════\n"
         
         return step_info
     
@@ -90,6 +99,11 @@ class WorkflowService:
         Returns:
             Info about the next step or workflow completion message.
         """
+        print(f"\n[WORKFLOW] ========== COMPLETING STEP ==========")
+        print(f"[WORKFLOW] Current node: {self.current_node.id if self.current_node else 'None'}")
+        print(f"[WORKFLOW] State updates received: {state_updates}")
+        print(f"[WORKFLOW] Current state before updates: {self.state}")
+        
         if self.workflow_graph is None:
             return "Error: No active workflow"
         
@@ -99,38 +113,59 @@ class WorkflowService:
         if self.workflow_complete:
             return "Workflow already complete"
         
-            # Apply any state updates first
+        # Apply any state updates first
         if state_updates:
             for key, value in state_updates.items():
                 if key not in self.workflow_graph.state_schema:
-                    return f"Error: State variable '{key}' not found in workflow schema. Available: {list(self.workflow_graph.state_schema.keys())}"
+                    error_msg = f"Error: State variable '{key}' not found in workflow schema. Available: {list(self.workflow_graph.state_schema.keys())}"
+                    print(f"[WORKFLOW] ❌ {error_msg}")
+                    return error_msg
                 self.state[key] = value
-                print(f"Updated workflow state: {key} = {value}")
+                print(f"[WORKFLOW] ✓ Updated state: {key} = {value}")
+        
+        print(f"[WORKFLOW] State after updates: {self.state}")
         
         # Get outgoing edge from current node
         edge = self.workflow_graph.edges.get(self.current_node.id)
         
         if not edge:
             self.workflow_complete = True
+            print(f"[WORKFLOW] ✓ Workflow complete - no outgoing edges")
             return "Workflow complete! No more steps."
+        
+        print(f"[WORKFLOW] Edge type: {edge.type}")
         
         # Resolve the target based on edge type
         next_node_id = self._resolve_edge_target(edge)
+        print(f"[WORKFLOW] Resolved next node: {next_node_id}")
         
         if next_node_id == "END":
             self.workflow_complete = True
+            print(f"[WORKFLOW] ✓ Workflow complete - reached END")
             return "Workflow complete! Reached END state."
         
         # Move to next node
         prev_node_id = self.current_node.id
         self.current_node = self.workflow_graph.nodes[next_node_id]
         
+        print(f"[WORKFLOW] ✓ Transitioned: {prev_node_id} → {next_node_id}")
+        print(f"[WORKFLOW] Next node intent: {self.current_node.intent}")
+        print(f"[WORKFLOW] Next node preferred actions: {self.current_node.preferred_actions}")
+        print(f"[WORKFLOW] ========================================\n")
+        
         # Return the next step info immediately
-        next_step_info = f"Advanced from '{prev_node_id}' to '{next_node_id}'.\n\n"
-        next_step_info += f"Next step: {self.current_node.intent}"
+        next_step_info = f"✓ Advanced from '{prev_node_id}' to '{next_node_id}'\n\n"
+        next_step_info += f"═══ NEXT STEP ═══\n"
+        next_step_info += f"Node ID: {self.current_node.id}\n"
+        next_step_info += f"Intent: {self.current_node.intent}\n"
         
         if self.current_node.preferred_actions:
-            next_step_info += f"\nPreferred tools to use: {', '.join(self.current_node.preferred_actions)}"
+            next_step_info += f"\n⚠️ REQUIRED ACTIONS:\n"
+            for action in self.current_node.preferred_actions:
+                next_step_info += f"  • You MUST call: {action}\n"
+            next_step_info += "\nExecute these actions NOW before doing anything else.\n"
+        
+        next_step_info += "═══════════════════"
         
         return next_step_info
     

@@ -16,11 +16,6 @@
       "preferred_actions": []
     },
     {
-      "id": "check_response_received",
-      "intent": "Has the user responded?",
-      "preferred_actions": []
-    },
-    {
       "id": "wake_user_aggressively",
       "intent": "Shout at the user more angrily and tell them they're worthless and should get up now.",
       "preferred_actions": []
@@ -44,14 +39,8 @@
       "type": "normal"
     },
     {
-      "id": "e1",
-      "source": "wake_user_1",
-      "target": "check_response_received",
-      "type": "normal"
-    },
-    {
       "id": "e2",
-      "source": "check_response_received",
+      "source": "wake_user_1",
       "target": {
         "true": "get_todays_calendar_data",
         "false": "wake_user_aggressively"
@@ -62,8 +51,12 @@
     {
       "id": "e4",
       "source": "wake_user_aggressively",
-      "target": "check_response_received",
-      "type": "normal"
+      "target": {
+        "true": "get_todays_calendar_data",
+        "false": "wake_user_aggressively"
+      },
+      "state_key": "user_response_detected",
+      "type": "condition"
     },
     {
       "id": "e5",

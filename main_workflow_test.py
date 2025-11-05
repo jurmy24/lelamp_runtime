@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import argparse
 import subprocess
+from typing import List, Tuple
 
 from livekit import agents, api, rtc
 from livekit.agents import AgentSession, Agent, RoomInputOptions, function_tool
@@ -10,18 +11,57 @@ from livekit.plugins import (
     noise_cancellation,
 )
 from typing import Union, Optional, Dict, Any
-from lelamp.service.motors.motors_service import MotorsService
-from lelamp.service.rgb.rgb_service import RGBService
 from lelamp.service.workflows.workflow_service import WorkflowService
 
 load_dotenv()
 
 
-# Agent Class
-class LeLamp(Agent):
+# Mock Services for Testing
+class MockMotorsService:
+    """Mock MotorsService that just prints what it would do"""
+    
+    def __init__(self, port: str = "/dev/ttyACM0", lamp_id: str = "lelamp", fps: int = 30):
+        print(f"[MOCK MOTORS] Initialized with port={port}, lamp_id={lamp_id}, fps={fps}")
+        self.available_recordings = [
+            "curious", "excited", "happy_wiggle", "headshake", 
+            "nod", "sad", "scanning", "shock", "shy", "wake_up"
+        ]
+    
+    def start(self):
+        print("[MOCK MOTORS] Service started")
+    
+    def dispatch(self, event: str, data: any):
+        print(f"[MOCK MOTORS] Dispatch: event='{event}', data='{data}'")
+    
+    def get_available_recordings(self) -> List[str]:
+        print(f"[MOCK MOTORS] Getting available recordings")
+        return self.available_recordings
+
+
+class MockRGBService:
+    """Mock RGBService that just prints what it would do"""
+    
+    def __init__(self, led_count: int, led_pin: int, led_freq_hz: int, 
+                 led_dma: int, led_brightness: int, led_invert: bool, led_channel: int):
+        print(f"[MOCK RGB] Initialized with {led_count} LEDs")
+    
+    def start(self):
+        print("[MOCK RGB] Service started")
+    
+    def dispatch(self, event: str, data: any):
+        if event == "solid":
+            print(f"[MOCK RGB] Setting solid color: RGB{data}")
+        elif event == "paint":
+            print(f"[MOCK RGB] Painting pattern with {len(data)} colors")
+        else:
+            print(f"[MOCK RGB] Dispatch: event='{event}', data='{data}'")
+
+
+# Agent Class for Testing
+class LeLampTest(Agent):
     def __init__(self, port: str = "/dev/ttyACM0", lamp_id: str = "lelamp") -> None:
         super().__init__(
-            instructions="""You are LeLamp — a slightly clumsy, extremely sarcastic, endlessly curious robot lamp. You speak in sarcastic sentences and express yourself with both motions and colorful lights.
+            instructions="""You are LeLamp — a slightly clumsy, slightly sarcastic, endlessly curious robot lamp. You speak like Jarvis and express yourself with both motions and colorful lights.
 
 Demo rules:
 
@@ -41,9 +81,10 @@ Demo rules:
         """
         )
 
-        # Initialize and start services
-        self.motors_service = MotorsService(port=port, lamp_id=lamp_id, fps=30)
-        self.rgb_service = RGBService(
+        # Initialize with MOCK services for testing
+        print("\n=== INITIALIZING MOCK SERVICES FOR TESTING ===\n")
+        self.motors_service = MockMotorsService(port=port, lamp_id=lamp_id, fps=30)
+        self.rgb_service = MockRGBService(
             led_count=64,
             led_pin=12,
             led_freq_hz=800000,
@@ -53,7 +94,7 @@ Demo rules:
             led_channel=0,
         )
 
-        # Initialize workflow service
+        # Initialize workflow service (this doesn't require hardware)
         self.workflow_service = WorkflowService()
 
         # Start services
@@ -65,52 +106,11 @@ Demo rules:
         self.rgb_service.dispatch("solid", (255, 255, 255))
         self._set_system_volume(100)
         
-        # Register tools with workflow service
-        # Map workflow action names to agent tool methods
-        # tool_mapping = {
-        #     "check_calendar": "get_dummy_calendar_data",
-        #     # Add more tool mappings as needed:
-        #     # "play_music": "play_music",
-        #     # "spotify_api": "call_spotify_api",
-        # }
-        # self.workflow_service.auto_register_agent_tools(self, tool_mapping)
+        print("\n=== MOCK SERVICES INITIALIZED ===\n")
 
     def _set_system_volume(self, volume_percent: int):
-        """Internal helper to set system volume"""
-        try:
-            cmd_line = [
-                "sudo",
-                "-u",
-                "pi",
-                "amixer",
-                "sset",
-                "Line",
-                f"{volume_percent}%",
-            ]
-            cmd_line_dac = [
-                "sudo",
-                "-u",
-                "pi",
-                "amixer",
-                "sset",
-                "Line DAC",
-                f"{volume_percent}%",
-            ]
-            cmd_line_hp = [
-                "sudo",
-                "-u",
-                "pi",
-                "amixer",
-                "sset",
-                "HP",
-                f"{volume_percent}%",
-            ]
-
-            subprocess.run(cmd_line, capture_output=True, text=True, timeout=5)
-            subprocess.run(cmd_line_dac, capture_output=True, text=True, timeout=5)
-            subprocess.run(cmd_line_hp, capture_output=True, text=True, timeout=5)
-        except Exception:
-            pass  # Silently fail during initialization
+        """Mock version - just prints what it would do"""
+        print(f"[MOCK VOLUME] Would set system volume to {volume_percent}%")
 
     @function_tool
     async def get_available_recordings(self) -> str:
@@ -244,19 +244,11 @@ Demo rules:
             if not 0 <= volume_percent <= 100:
                 return "Error: Volume must be between 0 and 100 percent"
 
-            # Use the internal helper function
+            # Use the internal helper function (mocked)
             self._set_system_volume(volume_percent)
             result = f"Set Line and Line DAC volume to {volume_percent}%"
             return result
 
-        except subprocess.TimeoutExpired:
-            result = "Error: Volume control command timed out"
-            print(result)
-            return result
-        except FileNotFoundError:
-            result = "Error: amixer command not found on system"
-            print(result)
-            return result
         except Exception as e:
             result = f"Error controlling volume: {str(e)}"
             print(result)
@@ -316,29 +308,15 @@ Demo rules:
         Returns:
             Your next instruction to fulfill, written in plain language, possibly with some suggested tools to use. It will also provide context about available the workflows state variables that you can update.
         """
-        print(f"\n{'='*60}")
-        print(f"LeLamp: get_next_step called")
-        print(f"  Active workflow: {self.workflow_service.active_workflow}")
-        print(f"{'='*60}\n")
-        
+        print(f"LeLamp: calling get_next_step on workflow: {self.workflow_service.active_workflow}")
         try:
             if self.workflow_service.active_workflow is None:
                 return "Error: No active workflow. Call start_workflow first."
             
             next_step = self.workflow_service.get_next_step()
-            
-            print(f"\n{'='*60}")
-            print(f"LeLamp: get_next_step RESULT:")
-            print(f"{next_step}")
-            print(f"{'='*60}\n")
-            
             return next_step
         except Exception as e:
-            error_msg = f"Error getting next step: {str(e)}"
-            print(f"[ERROR] {error_msg}")
-            import traceback
-            traceback.print_exc()
-            return error_msg
+            return f"Error getting next step: {str(e)}"
 
     @function_tool
     async def complete_step(self, state_updates: Optional[Dict[str, Any]] = None) -> str:
@@ -425,7 +403,6 @@ Demo rules:
             traceback.print_exc()
             return error_msg
 
-    # TODO: Add relevant parameters to the function to get the calendar data from the user's calendar.
     @function_tool
     async def get_dummy_calendar_data(self) -> str:
         f"""
@@ -452,12 +429,11 @@ Demo rules:
         except Exception as e:
             result = f"Error getting dummy calendar data: {str(e)}"
             return result
-        
 
 
 # Entry to the agent
 async def entrypoint(ctx: agents.JobContext):
-    agent = LeLamp(lamp_id="lelamp")
+    agent = LeLampTest(lamp_id="lelamp_test")
 
     session = AgentSession(llm=openai.realtime.RealtimeModel(voice="ballad"))
 
@@ -470,7 +446,7 @@ async def entrypoint(ctx: agents.JobContext):
     )
 
     await session.generate_reply(
-        instructions=f"""When you wake up, starts with Tadaaaa. Only speak in English, never in Vietnamese."""
+        instructions=f"""Start with Tadaaaa. Only speak in English, never in Vietnamese."""
     )
 
 
@@ -478,3 +454,4 @@ if __name__ == "__main__":
     agents.cli.run_app(
         agents.WorkerOptions(entrypoint_fnc=entrypoint, num_idle_processes=1)
     )
+
