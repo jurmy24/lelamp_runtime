@@ -28,7 +28,7 @@
     {
       "id": "get_todays_calendar_data",
       "intent": "Get the calendar data for today for the user.",
-      "preferred_actions": ["check_calendar"]
+      "preferred_actions": ["get_dummy_calendar_data"]
     },
     {
       "id": "morning_message",
@@ -52,11 +52,11 @@
     {
       "id": "e2",
       "source": "check_response_received",
-      "state_key": "user_response_detected",
       "target": {
         "true": "get_todays_calendar_data",
         "false": "wake_user_aggressively"
       },
+      "state_key": "user_response_detected",
       "type": "condition"
     },
     {

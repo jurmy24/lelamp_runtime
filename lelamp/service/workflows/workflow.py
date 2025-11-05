@@ -18,6 +18,7 @@ class Edge:
     source: str
     target: Union[str, Dict[str, str]]  # Can be string or conditional dict
     type: EdgeType
+    state_key: str | None = None # Which state variable to check for the condition
     
 @dataclass
 class StateVariable:
@@ -33,8 +34,7 @@ class Workflow:
     createdAt: str
     state_schema: Dict[str, StateVariable]
     nodes: Dict[str, Node]  # Indexed by node ID for O(1) lookup
-    # TODO: this doesn't need to be a list based on our current implementation, where a conditional edge has multiple target edges depending on the condition
-    edges: Dict[str, List[Edge]]  # Indexed by source node for fast traversal
+    edges: Dict[str, Edge]  # Indexed by source node (one edge per source)
     
     @classmethod
     def from_json(cls, data: dict) -> 'Workflow':
@@ -51,19 +51,17 @@ class Workflow:
             for node in data['nodes']
         }
         
-        # Parse edges and group by source for efficient traversal
+        # Parse edges indexed by source (one edge per source)
         edges_by_source = {}
         for edge_data in data['edges']:
             edge = Edge(
                 id=edge_data['id'],
                 source=edge_data['source'],
                 target=edge_data['target'],
-                type=EdgeType(edge_data['type'])
+                type=EdgeType(edge_data['type']),
+                state_key=edge_data.get('state_key')
             )
-            source = edge.source
-            if source not in edges_by_source:
-                edges_by_source[source] = []
-            edges_by_source[source].append(edge)
+            edges_by_source[edge.source] = edge
         
         return cls(
             id=data['id'],

@@ -67,13 +67,13 @@ Demo rules:
         
         # Register tools with workflow service
         # Map workflow action names to agent tool methods
-        tool_mapping = {
-            "check_calendar": "get_dummy_calendar_data",
-            # Add more tool mappings as needed:
-            # "play_music": "play_music",
-            # "spotify_api": "call_spotify_api",
-        }
-        self.workflow_service.auto_register_agent_tools(self, tool_mapping)
+        # tool_mapping = {
+        #     "check_calendar": "get_dummy_calendar_data",
+        #     # Add more tool mappings as needed:
+        #     # "play_music": "play_music",
+        #     # "spotify_api": "call_spotify_api",
+        # }
+        # self.workflow_service.auto_register_agent_tools(self, tool_mapping)
 
     def _set_system_volume(self, volume_percent: int):
         """Internal helper to set system volume"""
@@ -329,6 +329,49 @@ Demo rules:
         except Exception as e:
             result = f"Error getting next step: {str(e)}"
             return result
+        
+    @function_tool
+    async def get_next_step(self) -> str:
+        """
+        Get the current step in the active workflow with full context.
+        Shows you what to do, what tools to use, and what state variables you can update.
+        After fulfilling the instructions of the this step, call complete_step() to advance.
+        
+        Returns:
+            Your next instruction to fulfill, written in plain language, possibly with some suggested tools to use. It will also provide context about available the workflows state variables that you can update.
+        """
+        print(f"LeLamp: calling get_next_step on workflow: {self.workflow_service.active_workflow}")
+        try:
+            if self.workflow_service.active_workflow is None:
+                return "Error: No active workflow. Call start_workflow first."
+            
+            next_step = self.workflow_service.get_next_step()
+            return next_step
+        except Exception as e:
+            return f"Error getting next step: {str(e)}"
+
+    @function_tool
+    async def complete_step(self, state_updates: dict = None) -> str:
+        """
+        Complete the current workflow step and advance to the next one.
+        Optionally update state variables that affect workflow routing.
+        
+        Args:
+            state_updates: Optional dict of state updates, e.g. {"user_response_detected": true, "attempt_count": 1}
+                          Leave empty if no state needs updating.
+        
+        Returns:
+            Information about the next step or workflow completion message.
+        """
+        print(f"LeLamp: completing step with updates: {state_updates}")
+        try:
+            if self.workflow_service.active_workflow is None:
+                return "Error: No active workflow."
+            
+            result = self.workflow_service.complete_step(state_updates)
+            return result
+        except Exception as e:
+            return f"Error completing step: {str(e)}"
 
     # TODO: Add relevant parameters to the function to get the calendar data from the user's calendar.
     @function_tool
@@ -358,8 +401,6 @@ Demo rules:
             result = f"Error getting dummy calendar data: {str(e)}"
             return result
         
-
-
 
 
 # Entry to the agent
