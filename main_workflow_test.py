@@ -19,20 +19,32 @@ load_dotenv()
 # Mock Services for Testing
 class MockMotorsService:
     """Mock MotorsService that just prints what it would do"""
-    
-    def __init__(self, port: str = "/dev/ttyACM0", lamp_id: str = "lelamp", fps: int = 30):
-        print(f"[MOCK MOTORS] Initialized with port={port}, lamp_id={lamp_id}, fps={fps}")
+
+    def __init__(
+        self, port: str = "/dev/ttyACM0", lamp_id: str = "lelamp", fps: int = 30
+    ):
+        print(
+            f"[MOCK MOTORS] Initialized with port={port}, lamp_id={lamp_id}, fps={fps}"
+        )
         self.available_recordings = [
-            "curious", "excited", "happy_wiggle", "headshake", 
-            "nod", "sad", "scanning", "shock", "shy", "wake_up"
+            "curious",
+            "excited",
+            "happy_wiggle",
+            "headshake",
+            "nod",
+            "sad",
+            "scanning",
+            "shock",
+            "shy",
+            "wake_up",
         ]
-    
+
     def start(self):
         print("[MOCK MOTORS] Service started")
-    
+
     def dispatch(self, event: str, data: any):
         print(f"[MOCK MOTORS] Dispatch: event='{event}', data='{data}'")
-    
+
     def get_available_recordings(self) -> List[str]:
         print(f"[MOCK MOTORS] Getting available recordings")
         return self.available_recordings
@@ -40,14 +52,22 @@ class MockMotorsService:
 
 class MockRGBService:
     """Mock RGBService that just prints what it would do"""
-    
-    def __init__(self, led_count: int, led_pin: int, led_freq_hz: int, 
-                 led_dma: int, led_brightness: int, led_invert: bool, led_channel: int):
+
+    def __init__(
+        self,
+        led_count: int,
+        led_pin: int,
+        led_freq_hz: int,
+        led_dma: int,
+        led_brightness: int,
+        led_invert: bool,
+        led_channel: int,
+    ):
         print(f"[MOCK RGB] Initialized with {led_count} LEDs")
-    
+
     def start(self):
         print("[MOCK RGB] Service started")
-    
+
     def dispatch(self, event: str, data: any):
         if event == "solid":
             print(f"[MOCK RGB] Setting solid color: RGB{data}")
@@ -105,7 +125,7 @@ Demo rules:
         self.motors_service.dispatch("play", "wake_up")
         self.rgb_service.dispatch("solid", (255, 255, 255))
         self._set_system_volume(100)
-        
+
         print("\n=== MOCK SERVICES INITIALIZED ===\n")
 
     def _set_system_volume(self, volume_percent: int):
@@ -253,14 +273,14 @@ Demo rules:
             result = f"Error controlling volume: {str(e)}"
             print(result)
             return result
-        
+
     @function_tool
     async def get_available_workflows(self) -> str:
         """
         Discover what workflows you can execute! Get your repertoire of user-defined step workflows.
         Use this when someone asks you about your capabilities or when they ask you to execute a workflow.
         Each workflow is a user-defined graph or general instructions -
-        like waking up the user, playing a specific game, or sending some specific messages. 
+        like waking up the user, playing a specific game, or sending some specific messages.
 
         Returns:
             List of available workflow names you can execute.
@@ -304,51 +324,55 @@ Demo rules:
         Get the current step in the active workflow with full context.
         Shows you what to do, what tools to use, and what state variables you can update.
         After fulfilling the instructions of the this step, call complete_step() to advance.
-        
+
         Returns:
             Your next instruction to fulfill, written in plain language, possibly with some suggested tools to use. It will also provide context about available the workflows state variables that you can update.
         """
-        print(f"LeLamp: calling get_next_step on workflow: {self.workflow_service.active_workflow}")
+        print(
+            f"LeLamp: calling get_next_step on workflow: {self.workflow_service.active_workflow}"
+        )
         try:
             if self.workflow_service.active_workflow is None:
                 return "Error: No active workflow. Call start_workflow first."
-            
+
             next_step = self.workflow_service.get_next_step()
             return next_step
         except Exception as e:
             return f"Error getting next step: {str(e)}"
 
     @function_tool
-    async def complete_step(self, state_updates: Optional[Dict[str, Any]] = None) -> str:
+    async def complete_step(
+        self, state_updates: Optional[Dict[str, Any]] = None
+    ) -> str:
         """
         Complete the current workflow step and advance to the next one.
         Optionally update state variables that affect workflow routing.
-        
+
         Args:
             state_updates: Optional dict of state updates, e.g. {"user_response_detected": true, "attempt_count": 1}
                           Leave empty if no state needs updating.
-        
+
         Returns:
             Information about the next step or workflow completion message.
         """
         import json
         import inspect
-        
+
         print(f"\n{'='*60}")
         print(f"LeLamp: complete_step called")
-        
+
         # Debug: Check what we actually received
         frame = inspect.currentframe()
         if frame and frame.f_back:
             local_vars = frame.f_back.f_locals
             print(f"  All local variables: {list(local_vars.keys())}")
-            if 'state_updates' in local_vars:
+            if "state_updates" in local_vars:
                 print(f"  state_updates from locals: {local_vars['state_updates']}")
-        
+
         print(f"  Raw state_updates parameter: {state_updates}")
         print(f"  Type: {type(state_updates)}")
         print(f"  Repr: {repr(state_updates)}")
-        
+
         # Handle case where state_updates might come as a string or need parsing
         original_state_updates = state_updates
         if state_updates is not None:
@@ -361,14 +385,18 @@ Demo rules:
                     print(f"     String value was: {repr(original_state_updates)}")
                     state_updates = None
             elif not isinstance(state_updates, dict):
-                print(f"  ⚠️  Warning: state_updates is not a dict (type: {type(state_updates)}), attempting conversion...")
+                print(
+                    f"  ⚠️  Warning: state_updates is not a dict (type: {type(state_updates)}), attempting conversion..."
+                )
                 try:
                     # Try to convert to dict if it's a compatible type
-                    if hasattr(state_updates, '__dict__'):
+                    if hasattr(state_updates, "__dict__"):
                         state_updates = dict(state_updates)
                     elif isinstance(state_updates, (list, tuple)):
                         # Maybe it's a list of key-value pairs?
-                        state_updates = dict(state_updates) if len(state_updates) == 2 else None
+                        state_updates = (
+                            dict(state_updates) if len(state_updates) == 2 else None
+                        )
                     else:
                         state_updates = None
                     if state_updates:
@@ -379,27 +407,30 @@ Demo rules:
                     print(f"  ❌ Error converting to dict: {e}, setting to None")
                     state_updates = None
         else:
-            print(f"  ⚠️  state_updates is None - this might indicate LiveKit didn't parse the parameter")
-        
+            print(
+                f"  ⚠️  state_updates is None - this might indicate LiveKit didn't parse the parameter"
+            )
+
         print(f"  Final state_updates: {state_updates}")
         print(f"{'='*60}\n")
-        
+
         try:
             if self.workflow_service.active_workflow is None:
                 return "Error: No active workflow."
-            
+
             result = self.workflow_service.complete_step(state_updates)
-            
+
             print(f"\n{'='*60}")
             print(f"LeLamp: complete_step RESULT:")
             print(f"{result}")
             print(f"{'='*60}\n")
-            
+
             return result
         except Exception as e:
             error_msg = f"Error completing step: {str(e)}"
             print(f"[ERROR] {error_msg}")
             import traceback
+
             traceback.print_exc()
             return error_msg
 
@@ -416,12 +447,12 @@ Demo rules:
                         {
                             "title": "Meeting with John",
                             "start_time": "2025-11-04T10:00:00Z",
-                            "end_time": "2025-11-04T11:00:00Z"
+                            "end_time": "2025-11-04T11:00:00Z",
                         },
                         {
                             "title": "Hot Yoga Session",
                             "start_time": "2025-11-04T12:00:00Z",
-                            "end_time": "2025-11-04T13:00:00Z"
+                            "end_time": "2025-11-04T13:00:00Z",
                         },
                     ]
                 }
@@ -454,4 +485,3 @@ if __name__ == "__main__":
     agents.cli.run_app(
         agents.WorkerOptions(entrypoint_fnc=entrypoint, num_idle_processes=1)
     )
-

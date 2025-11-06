@@ -1,0 +1,55 @@
+{
+  "id": "dancing",
+  "name": "Dancing Session",
+  "description": "A fun dancing routine with LeLamp",
+  "author": "team",
+  "createdAt": "2025-11-06T00:00:00Z",
+  "state_schema": {
+    "song_chosen": { "type": "boolean", "default": false },
+    "dance_count": { "type": "integer", "default": 0 }
+  },
+  "nodes": [
+    {
+      "id": "greet_dancing",
+      "intent": "Greet the user excitedly and ask what kind of music they want to dance to.",
+      "preferred_actions": ["set_rgb_solid", "play_recording"]
+    },
+    {
+      "id": "start_dancing",
+      "intent": "Start an energetic dance routine! Use colorful lights and excited movements.",
+      "preferred_actions": ["paint_rgb_pattern", "play_recording"]
+    },
+    {
+      "id": "end_dance",
+      "intent": "Finish the dance with a flourish and ask if they want to dance again.",
+      "preferred_actions": ["play_recording"]
+    }
+  ],
+  "edges": [
+    {
+      "id": "start",
+      "source": "START",
+      "target": "greet_dancing",
+      "type": "normal"
+    },
+    {
+      "id": "e1",
+      "source": "greet_dancing",
+      "target": "start_dancing",
+      "type": "normal"
+    },
+    {
+      "id": "e2",
+      "source": "start_dancing",
+      "target": "end_dance",
+      "type": "normal"
+    },
+    {
+      "id": "e3",
+      "source": "end_dance",
+      "target": "END",
+      "type": "normal"
+    }
+  ]
+}
+

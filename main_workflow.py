@@ -55,6 +55,8 @@ Demo rules:
 
         # Initialize workflow service
         self.workflow_service = WorkflowService()
+        # Pass agent instance to workflow service for dynamic tool registration
+        self.workflow_service.set_agent(self)
 
         # Start services
         self.motors_service.start()
@@ -64,16 +66,6 @@ Demo rules:
         self.motors_service.dispatch("play", "wake_up")
         self.rgb_service.dispatch("solid", (255, 255, 255))
         self._set_system_volume(100)
-        
-        # Register tools with workflow service
-        # Map workflow action names to agent tool methods
-        # tool_mapping = {
-        #     "check_calendar": "get_dummy_calendar_data",
-        #     # Add more tool mappings as needed:
-        #     # "play_music": "play_music",
-        #     # "spotify_api": "call_spotify_api",
-        # }
-        # self.workflow_service.auto_register_agent_tools(self, tool_mapping)
 
     def _set_system_volume(self, volume_percent: int):
         """Internal helper to set system volume"""
@@ -261,14 +253,14 @@ Demo rules:
             result = f"Error controlling volume: {str(e)}"
             print(result)
             return result
-        
+
     @function_tool
     async def get_available_workflows(self) -> str:
         """
         Discover what workflows you can execute! Get your repertoire of user-defined step workflows.
         Use this when someone asks you about your capabilities or when they ask you to execute a workflow.
         Each workflow is a user-defined graph or general instructions -
-        like waking up the user, playing a specific game, or sending some specific messages. 
+        like waking up the user, playing a specific game, or sending some specific messages.
 
         Returns:
             List of available workflow names you can execute.
@@ -312,7 +304,7 @@ Demo rules:
         Get the current step in the active workflow with full context.
         Shows you what to do, what tools to use, and what state variables you can update.
         After fulfilling the instructions of the this step, call complete_step() to advance.
-        
+
         Returns:
             Your next instruction to fulfill, written in plain language, possibly with some suggested tools to use. It will also provide context about available the workflows state variables that you can update.
         """
@@ -320,57 +312,60 @@ Demo rules:
         print(f"LeLamp: get_next_step called")
         print(f"  Active workflow: {self.workflow_service.active_workflow}")
         print(f"{'='*60}\n")
-        
+
         try:
             if self.workflow_service.active_workflow is None:
                 return "Error: No active workflow. Call start_workflow first."
-            
+
             next_step = self.workflow_service.get_next_step()
-            
+
             print(f"\n{'='*60}")
             print(f"LeLamp: get_next_step RESULT:")
             print(f"{next_step}")
             print(f"{'='*60}\n")
-            
+
             return next_step
         except Exception as e:
             error_msg = f"Error getting next step: {str(e)}"
             print(f"[ERROR] {error_msg}")
             import traceback
+
             traceback.print_exc()
             return error_msg
 
     @function_tool
-    async def complete_step(self, state_updates: Optional[Dict[str, Any]] = None) -> str:
+    async def complete_step(
+        self, state_updates: Optional[Dict[str, Any]] = None
+    ) -> str:
         """
         Complete the current workflow step and advance to the next one.
         Optionally update state variables that affect workflow routing.
-        
+
         Args:
             state_updates: Optional dict of state updates, e.g. {"user_response_detected": true, "attempt_count": 1}
                           Leave empty if no state needs updating.
-        
+
         Returns:
             Information about the next step or workflow completion message.
         """
         import json
         import inspect
-        
+
         print(f"\n{'='*60}")
         print(f"LeLamp: complete_step called")
-        
+
         # Debug: Check what we actually received
         frame = inspect.currentframe()
         if frame and frame.f_back:
             local_vars = frame.f_back.f_locals
             print(f"  All local variables: {list(local_vars.keys())}")
-            if 'state_updates' in local_vars:
+            if "state_updates" in local_vars:
                 print(f"  state_updates from locals: {local_vars['state_updates']}")
-        
+
         print(f"  Raw state_updates parameter: {state_updates}")
         print(f"  Type: {type(state_updates)}")
         print(f"  Repr: {repr(state_updates)}")
-        
+
         # Handle case where state_updates might come as a string or need parsing
         original_state_updates = state_updates
         if state_updates is not None:
@@ -382,77 +377,65 @@ Demo rules:
                     print(f"  ❌ Warning: Could not parse state_updates as JSON: {e}")
                     print(f"     String value was: {repr(original_state_updates)}")
                     state_updates = None
-            elif not isinstance(state_updates, dict):
-                print(f"  ⚠️  Warning: state_updates is not a dict (type: {type(state_updates)}), attempting conversion...")
-                try:
-                    # Try to convert to dict if it's a compatible type
-                    if hasattr(state_updates, '__dict__'):
-                        state_updates = dict(state_updates)
-                    elif isinstance(state_updates, (list, tuple)):
-                        # Maybe it's a list of key-value pairs?
-                        state_updates = dict(state_updates) if len(state_updates) == 2 else None
-                    else:
-                        state_updates = None
-                    if state_updates:
-                        print(f"  ✓ Converted to dict: {state_updates}")
-                    else:
-                        print(f"  ❌ Could not convert to dict, setting to None")
-                except Exception as e:
-                    print(f"  ❌ Error converting to dict: {e}, setting to None")
-                    state_updates = None
         else:
-            print(f"  ⚠️  state_updates is None - this might indicate LiveKit didn't parse the parameter")
-        
+            print(
+                f"  ⚠️  state_updates is None - this might indicate LiveKit didn't parse the parameter"
+            )
+
         print(f"  Final state_updates: {state_updates}")
         print(f"{'='*60}\n")
-        
+
         try:
             if self.workflow_service.active_workflow is None:
                 return "Error: No active workflow."
-            
+
             result = self.workflow_service.complete_step(state_updates)
-            
+
             print(f"\n{'='*60}")
             print(f"LeLamp: complete_step RESULT:")
             print(f"{result}")
             print(f"{'='*60}\n")
-            
+
             return result
         except Exception as e:
             error_msg = f"Error completing step: {str(e)}"
             print(f"[ERROR] {error_msg}")
             import traceback
+
             traceback.print_exc()
             return error_msg
 
-    # TODO: Add relevant parameters to the function to get the calendar data from the user's calendar.
-    @function_tool
-    async def get_dummy_calendar_data(self) -> str:
-        f"""
-        Get dummy calendar data for the user. Call this function when you need to get the calendar data for the user. 
-        """
-        print("LeLamp: calling get_dummy_calendar_data function")
-        try:
-            return {
-                "calendar_data": {
-                    "events": [
-                        {
-                            "title": "Meeting with John",
-                            "start_time": "2025-11-04T10:00:00Z",
-                            "end_time": "2025-11-04T11:00:00Z"
-                        },
-                        {
-                            "title": "Hot Yoga Session",
-                            "start_time": "2025-11-04T12:00:00Z",
-                            "end_time": "2025-11-04T13:00:00Z"
-                        },
-                    ]
-                }
-            }
-        except Exception as e:
-            result = f"Error getting dummy calendar data: {str(e)}"
-            return result
-        
+    #####################################################################
+    # Create your own tools here.
+    #####################################################################
+
+    # Example tool: Get dummy calendar data
+    # @function_tool
+    # async def get_dummy_calendar_data(self) -> str:
+    #     f"""
+    #     Get dummy calendar data for the user. Call this function when you need to get the calendar data for the user.
+    #     """
+    #     print("LeLamp: calling get_dummy_calendar_data function")
+    #     try:
+    #         return {
+    #             "calendar_data": {
+    #                 "events": [
+    #                     {
+    #                         "title": "Meeting with John",
+    #                         "start_time": "2025-11-04T10:00:00Z",
+    #                         "end_time": "2025-11-04T11:00:00Z",
+    #                     },
+    #                     {
+    #                         "title": "Hot Yoga Session",
+    #                         "start_time": "2025-11-04T12:00:00Z",
+    #                         "end_time": "2025-11-04T13:00:00Z",
+    #                     },
+    #                 ]
+    #             }
+    #         }
+    #     except Exception as e:
+    #         result = f"Error getting dummy calendar data: {str(e)}"
+    #         return result
 
 
 # Entry to the agent
