@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import importlib.util
+import inspect
 from typing import Optional, Dict, Any, Callable
 
 from lelamp.service.workflows.workflow import Edge, EdgeType, Workflow
@@ -23,6 +24,55 @@ class WorkflowService:
     def set_agent(self, agent):
         """Set the agent instance for dynamic tool registration"""
         self.agent_instance = agent
+
+    def preload_workflow_tools(self, workflow_names: list[str] = None):
+        """
+        Preload tools from specified workflows (or all workflows if None) before session starts.
+        This ensures tools are available when LiveKit scans for them at session initialization.
+
+        Args:
+            workflow_names: List of workflow names to load tools from. If None, loads all available workflows.
+        """
+        if not self.agent_instance:
+            print("[WORKFLOW] Warning: No agent instance set. Cannot preload tools.")
+            return
+
+        available_workflows = self.get_available_workflows()
+
+        if workflow_names is None:
+            # Load all available workflows
+            workflow_names = available_workflows
+            print(
+                f"[WORKFLOW] Preloading tools from all available workflows: {workflow_names}"
+            )
+        else:
+            # Validate that specified workflows exist
+            invalid_workflows = [
+                w for w in workflow_names if w not in available_workflows
+            ]
+            if invalid_workflows:
+                print(
+                    f"[WORKFLOW] Warning: Invalid workflow names: {invalid_workflows}"
+                )
+                print(f"[WORKFLOW] Available workflows: {available_workflows}")
+                workflow_names = [w for w in workflow_names if w in available_workflows]
+
+            if workflow_names:
+                print(
+                    f"[WORKFLOW] Preloading tools from specified workflows: {workflow_names}"
+                )
+            else:
+                print(f"[WORKFLOW] No valid workflows to preload")
+                return
+
+        total_tools = 0
+        for workflow_name in workflow_names:
+            tool_count = self._load_workflow_tools(workflow_name, preload_only=True)
+            total_tools += tool_count
+
+        print(
+            f"[WORKFLOW] ✓ Preloaded {total_tools} tools from {len(workflow_names)} workflow(s)"
+        )
 
     def start_workflow(self, workflow_name: str):
         # Load workflow.json from the workflow folder
@@ -53,13 +103,22 @@ class WorkflowService:
         self.current_node = None
         self.workflow_complete = False
 
-    def _load_workflow_tools(self, workflow_name: str):
-        """Dynamically load and register tools from workflow's tools.py"""
+    def _load_workflow_tools(self, workflow_name: str, preload_only: bool = False):
+        """
+        Dynamically load and register tools from workflow's tools.py
+
+        Args:
+            workflow_name: Name of the workflow to load tools from
+            preload_only: If True, only load tools without starting the workflow
+
+        Returns:
+            Number of tools loaded
+        """
         tools_path = os.path.join(self.workflows_dir, workflow_name, "tools.py")
 
         if not os.path.exists(tools_path):
             print(f"[WORKFLOW] No tools.py found for workflow '{workflow_name}'")
-            return
+            return 0
 
         try:
             # Import the tools module dynamically
@@ -71,7 +130,7 @@ class WorkflowService:
                 spec.loader.exec_module(tools_module)
 
                 # Find all functions that should be registered as tools
-                # Look for async functions (tools should be async)
+                # Look for async functions decorated with @function_tool
                 tool_count = 0
                 for attr_name in dir(tools_module):
                     if attr_name.startswith("_"):  # Skip private functions
@@ -79,40 +138,127 @@ class WorkflowService:
 
                     attr = getattr(tools_module, attr_name)
 
-                    # Check if it's a callable function with the function_tool metadata
-                    if callable(attr) and (
-                        hasattr(attr, "__wrapped__") or hasattr(attr, "_metadata")
-                    ):
+                    # Check if it's an async callable function (tools should be async)
+                    # The @function_tool decorator will be re-applied after binding to ensure LiveKit discovery
+                    is_async_function = inspect.iscoroutinefunction(attr)
+                    is_callable = callable(attr)
+
+                    if (
+                        is_callable and is_async_function
+                    ):  # Accept all async functions as potential tools
                         if self.agent_instance:
-                            # Bind the function to the agent instance as a method
+                            # Import function_tool to re-apply decorator if needed
+                            from livekit.agents import function_tool
+                            import functools
                             import types
 
-                            bound_method = types.MethodType(attr, self.agent_instance)
+                            # IMPORTANT: The function from tools.py is already decorated with @function_tool
+                            # But it's a standalone function, not a method. We need to:
+                            # 1. Unwrap it to get the original function
+                            # 2. Create a proper method wrapper
+                            # 3. Re-apply the decorator to ensure LiveKit discovers it
+
+                            # Unwrap if already decorated
+                            unwrapped_func = getattr(attr, "__wrapped__", attr)
+
+                            # Create a wrapper that will be bound as a method
+                            # When LiveKit calls agent.get_dummy_calendar_data(), it passes self automatically
+                            # But original_func expects self as first arg, so we need to handle that
+                            @functools.wraps(unwrapped_func)
+                            async def tool_method(self_instance, *args, **kwargs):
+                                # Call the original function with self_instance as self
+                                # Note: self_instance is the agent instance passed by LiveKit
+                                return await unwrapped_func(
+                                    self_instance, *args, **kwargs
+                                )
+
+                            # Copy all important attributes from original function
+                            tool_method.__name__ = unwrapped_func.__name__
+                            tool_method.__qualname__ = f"{self.agent_instance.__class__.__name__}.{unwrapped_func.__name__}"
+                            tool_method.__doc__ = unwrapped_func.__doc__
+                            tool_method.__annotations__ = getattr(
+                                unwrapped_func, "__annotations__", {}
+                            )
+
+                            # CRITICAL: Apply the function_tool decorator to create a proper tool
+                            # This must be done BEFORE adding to the class
+                            decorated_func = function_tool(tool_method)
 
                             # Store original for cleanup
                             self.workflow_tools[attr_name] = attr
 
-                            # Add to agent instance - LiveKit will discover it
-                            setattr(self.agent_instance, attr_name, bound_method)
+                            # CRITICAL: Add to the CLASS, not the instance
+                            # LiveKit scans for tools using class introspection, not instance attributes
+                            # By adding it to the class, LiveKit's introspection will discover it
+                            agent_class = self.agent_instance.__class__
+
+                            # Use setattr to add the method to the class
+                            # Note: We can't directly modify __dict__ as it's a read-only mappingproxy in Python 3
+                            setattr(agent_class, attr_name, decorated_func)
+
+                            # CRITICAL: LiveKit maintains a `_tools` list on the agent instance
+                            # The `tools` property reads from `_tools`, so we need to add to `_tools` directly
+                            # Get the bound method from the agent instance
+                            bound_method = getattr(self.agent_instance, attr_name)
+
+                            # Add to agent._tools directly (this is where the tools property reads from)
+                            # IMPORTANT: Check for duplicates by name, not by object identity
+                            # (LiveKit might create different bound method objects for the same function)
+                            if hasattr(self.agent_instance, "_tools"):
+                                # Check if a tool with this name already exists
+                                existing_tool_names = [
+                                    tool.__name__ for tool in self.agent_instance._tools
+                                ]
+                                if attr_name not in existing_tool_names:
+                                    self.agent_instance._tools.append(bound_method)
+                                    print(
+                                        f"[WORKFLOW]   ✓ Added {attr_name} to agent._tools list"
+                                    )
+                                else:
+                                    print(
+                                        f"[WORKFLOW]   ℹ {attr_name} already in agent._tools list (skipping duplicate)"
+                                    )
+                            else:
+                                print(
+                                    f"[WORKFLOW]   ⚠ Agent instance doesn't have '_tools' attribute yet"
+                                )
+
+                            # NOTE: Don't call update_tools() here as it might re-discover tools and cause duplicates
+                            # The tool is already on the class, so LiveKit will discover it when needed
+
                             tool_count += 1
                             print(f"[WORKFLOW] ✓ Registered workflow tool: {attr_name}")
 
-                print(
-                    f"[WORKFLOW] Loaded {tool_count} tools for workflow '{workflow_name}'"
-                )
+                if not preload_only:
+                    print(
+                        f"[WORKFLOW] Loaded {tool_count} tools for workflow '{workflow_name}'"
+                    )
+                else:
+                    print(
+                        f"[WORKFLOW] Preloaded {tool_count} tools from workflow '{workflow_name}'"
+                    )
+
+                return tool_count
+            else:
+                print(f"[WORKFLOW] Could not load tools module for '{workflow_name}'")
+                return 0
 
         except Exception as e:
             print(f"[WORKFLOW] Error loading tools for '{workflow_name}': {e}")
             import traceback
 
             traceback.print_exc()
+            return 0
+
+        return 0  # Fallback if spec is None or no tools found
 
     def _unload_workflow_tools(self):
-        """Unregister workflow-specific tools from the agent"""
+        """Unregister workflow-specific tools from the agent class"""
         if self.agent_instance:
             for tool_name in self.workflow_tools.keys():
-                if hasattr(self.agent_instance, tool_name):
-                    delattr(self.agent_instance, tool_name)
+                # Remove from class, not instance (since we added it to the class)
+                if hasattr(self.agent_instance.__class__, tool_name):
+                    delattr(self.agent_instance.__class__, tool_name)
                     print(f"[WORKFLOW] ✗ Unregistered workflow tool: {tool_name}")
 
         self.workflow_tools.clear()

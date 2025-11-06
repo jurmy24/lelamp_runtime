@@ -4,10 +4,10 @@ from livekit.agents import function_tool
 @function_tool
 async def get_dummy_calendar_data(self) -> dict:
     """
-    Get the user's calendar data for today. Call this function when you need to see what 
-    meetings, events, or tasks the user has scheduled for the day. This helps you inform 
+    Get the user's calendar data for today. Call this function when you need to see what
+    meetings, events, or tasks the user has scheduled for the day. This helps you inform
     them about their daily schedule during the wake-up routine.
-    
+
     Returns:
         A dictionary containing today's calendar events with titles, start times, and end times.
     """
@@ -32,4 +32,3 @@ async def get_dummy_calendar_data(self) -> dict:
     except Exception as e:
         result = f"Error getting dummy calendar data: {str(e)}"
         return {"error": result}
-

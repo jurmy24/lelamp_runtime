@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import argparse
 import subprocess
+import os
 
 from livekit import agents, api, rtc
 from livekit.agents import AgentSession, Agent, RoomInputOptions, function_tool
@@ -15,6 +16,32 @@ from lelamp.service.rgb.rgb_service import RGBService
 from lelamp.service.workflows.workflow_service import WorkflowService
 
 load_dotenv()
+
+
+# Parse workflow arguments from environment variable (LiveKit CLI intercepts command-line args)
+def parse_workflow_args():
+    """
+    Parse which workflows to preload from environment variable.
+    LiveKit CLI intercepts command-line arguments, so we use environment variables instead.
+
+    Usage:
+        # Single workflow:
+        WORKFLOWS=wake_up uv run main_workflow.py dev
+        
+        # Multiple workflows:
+        WORKFLOWS=wake_up,focus_session uv run main_workflow.py dev
+        
+        # All workflows (if WORKFLOWS not set):
+        uv run main_workflow.py dev
+    """
+    env_workflows = os.getenv("WORKFLOWS")
+    if env_workflows:
+        workflows = [w.strip() for w in env_workflows.split(",") if w.strip()]
+        print(f"[CONFIG] Loading workflows from WORKFLOWS env var: {workflows}")
+        return workflows
+    else:
+        print("[CONFIG] No WORKFLOWS env var set, will load all available workflows")
+        return None
 
 
 # Agent Class
@@ -440,7 +467,23 @@ Demo rules:
 
 # Entry to the agent
 async def entrypoint(ctx: agents.JobContext):
+    # Parse which workflows to preload
+    workflow_names = parse_workflow_args()
+
     agent = LeLamp(lamp_id="lelamp")
+
+    # Ensure agent instance is set (should already be set in __init__, but double-check)
+    if agent.workflow_service.agent_instance is None:
+        print("[MAIN] Warning: Agent instance not set, setting it now...")
+        agent.workflow_service.set_agent(agent)
+
+    # Preload workflow tools BEFORE creating the session
+    # LiveKit scans for tools when AgentSession is instantiated, so we must register before that
+    if workflow_names:
+        print(f"[MAIN] Preloading tools from workflows: {workflow_names}")
+    else:
+        print(f"[MAIN] Preloading tools from all available workflows")
+    agent.workflow_service.preload_workflow_tools(workflow_names)
 
     session = AgentSession(llm=openai.realtime.RealtimeModel(voice="ballad"))
 

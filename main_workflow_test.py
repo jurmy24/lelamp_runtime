@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import argparse
 import subprocess
+import os
 from typing import List, Tuple
 
 from livekit import agents, api, rtc
@@ -116,6 +117,8 @@ Demo rules:
 
         # Initialize workflow service (this doesn't require hardware)
         self.workflow_service = WorkflowService()
+        # Pass agent instance to workflow service for dynamic tool registration
+        self.workflow_service.set_agent(self)
 
         # Start services
         self.motors_service.start()
@@ -434,37 +437,52 @@ Demo rules:
             traceback.print_exc()
             return error_msg
 
-    @function_tool
-    async def get_dummy_calendar_data(self) -> str:
-        f"""
-        Get dummy calendar data for the user. Call this function when you need to get the calendar data for the user. 
-        """
-        print("LeLamp: calling get_dummy_calendar_data function")
-        try:
-            return {
-                "calendar_data": {
-                    "events": [
-                        {
-                            "title": "Meeting with John",
-                            "start_time": "2025-11-04T10:00:00Z",
-                            "end_time": "2025-11-04T11:00:00Z",
-                        },
-                        {
-                            "title": "Hot Yoga Session",
-                            "start_time": "2025-11-04T12:00:00Z",
-                            "end_time": "2025-11-04T13:00:00Z",
-                        },
-                    ]
-                }
-            }
-        except Exception as e:
-            result = f"Error getting dummy calendar data: {str(e)}"
-            return result
+
+# Parse workflow arguments from environment variable (LiveKit CLI intercepts command-line args)
+def parse_workflow_args():
+    """
+    Parse which workflows to preload from environment variable.
+    LiveKit CLI intercepts command-line arguments, so we use environment variables instead.
+
+    Usage:
+        # Single workflow:
+        WORKFLOWS=wake_up uv run main_workflow_test.py console
+
+        # Multiple workflows:
+        WORKFLOWS=wake_up,focus_session uv run main_workflow_test.py console
+
+        # All workflows (if WORKFLOWS not set):
+        uv run main_workflow_test.py console
+    """
+    env_workflows = os.getenv("WORKFLOWS")
+    if env_workflows:
+        workflows = [w.strip() for w in env_workflows.split(",") if w.strip()]
+        print(f"[CONFIG] Loading workflows from WORKFLOWS env var: {workflows}")
+        return workflows
+    else:
+        print("[CONFIG] No WORKFLOWS env var set, will load all available workflows")
+        return None
 
 
 # Entry to the agent
 async def entrypoint(ctx: agents.JobContext):
+    # Parse which workflows to preload
+    workflow_names = parse_workflow_args()
+
     agent = LeLampTest(lamp_id="lelamp_test")
+
+    # Ensure agent instance is set (should already be set in __init__, but double-check)
+    if agent.workflow_service.agent_instance is None:
+        print("[MAIN] Warning: Agent instance not set, setting it now...")
+        agent.workflow_service.set_agent(agent)
+
+    # Preload workflow tools BEFORE creating the session
+    # LiveKit scans for tools when AgentSession is instantiated, so we must register before that
+    if workflow_names:
+        print(f"[MAIN] Preloading tools from workflows: {workflow_names}")
+    else:
+        print(f"[MAIN] Preloading tools from all available workflows")
+    agent.workflow_service.preload_workflow_tools(workflow_names)
 
     session = AgentSession(llm=openai.realtime.RealtimeModel(voice="ballad"))
 
