@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import argparse
 import subprocess
+import os
 
 from livekit import agents, api, rtc
 from livekit.agents import AgentSession, Agent, RoomInputOptions, function_tool
@@ -9,11 +10,38 @@ from livekit.plugins import (
     openai,
     noise_cancellation,
 )
-from typing import Union
+from typing import Union, Optional, Dict, Any
 from lelamp.service.motors.motors_service import MotorsService
 from lelamp.service.rgb.rgb_service import RGBService
+from lelamp.service.workflows.workflow_service import WorkflowService
 
 load_dotenv()
+
+
+# Parse workflow arguments from environment variable (LiveKit CLI intercepts command-line args)
+def parse_workflow_args():
+    """
+    Parse which workflows to preload from environment variable.
+    LiveKit CLI intercepts command-line arguments, so we use environment variables instead.
+
+    Usage:
+        # Single workflow:
+        WORKFLOWS=wake_up uv run main_workflow.py dev
+        
+        # Multiple workflows:
+        WORKFLOWS=wake_up,focus_session uv run main_workflow.py dev
+        
+        # All workflows (if WORKFLOWS not set):
+        uv run main_workflow.py dev
+    """
+    env_workflows = os.getenv("WORKFLOWS")
+    if env_workflows:
+        workflows = [w.strip() for w in env_workflows.split(",") if w.strip()]
+        print(f"[CONFIG] Loading workflows from WORKFLOWS env var: {workflows}")
+        return workflows
+    else:
+        print("[CONFIG] No WORKFLOWS env var set, will load all available workflows")
+        return None
 
 
 # Agent Class
@@ -36,6 +64,7 @@ Demo rules:
 
 6. When asked to brag or show off, mention: I received 300k views in 4 weeks since my launch and I'm not a A list celebrity YET but i think its just a matter of time, you know. Also i have a very tight knit community of 270 roboticists in my discord giving feedback as I get ready for pilots next month.  
 
+7. You can execute workflows by using the start_workflow function. 
         """
         )
 
@@ -50,6 +79,11 @@ Demo rules:
             led_invert=False,
             led_channel=0,
         )
+
+        # Initialize workflow service
+        self.workflow_service = WorkflowService()
+        # Pass agent instance to workflow service for dynamic tool registration
+        self.workflow_service.set_agent(self)
 
         # Start services
         self.motors_service.start()
@@ -247,10 +281,209 @@ Demo rules:
             print(result)
             return result
 
+    @function_tool
+    async def get_available_workflows(self) -> str:
+        """
+        Discover what workflows you can execute! Get your repertoire of user-defined step workflows.
+        Use this when someone asks you about your capabilities or when they ask you to execute a workflow.
+        Each workflow is a user-defined graph or general instructions -
+        like waking up the user, playing a specific game, or sending some specific messages.
+
+        Returns:
+            List of available workflow names you can execute.
+        """
+        print("LeLamp: get_available_workflows function called")
+        try:
+            workflows = self.workflow_service.get_available_workflows()
+
+            if workflows:
+                result = f"Available workflows: {', '.join(workflows)}"
+                return result
+            else:
+                result = "No workflows found."
+                return result
+        except Exception as e:
+            result = f"Error getting workflows: {str(e)}"
+            return result
+
+    @function_tool
+    async def start_workflow(self, workflow_name: str) -> str:
+        f"""
+        Start a workflow called {workflow_name}. This sets the workflow_service's active workflow.
+        In order to perform the workflow you will need to iteratively call the get_next_step function until the workflow is complete.
+        
+        Args:
+            workflow_name: Name of the workflow to start. Check the available workflows with the get_available_workflows function first.
+        """
+        print(
+            f"LeLamp: start_workflow function called with workflow_name: {workflow_name}"
+        )
+        try:
+            self.workflow_service.start_workflow(workflow_name)
+            return f"Started the workflow: {workflow_name}. You can now call the get_next_step function to get the next step."
+        except Exception as e:
+            result = f"Error starting workflow {workflow_name}: {str(e)}"
+            return result
+
+    @function_tool
+    async def get_next_step(self) -> str:
+        """
+        Get the current step in the active workflow with full context.
+        Shows you what to do, what tools to use, and what state variables you can update.
+        After fulfilling the instructions of the this step, call complete_step() to advance.
+
+        Returns:
+            Your next instruction to fulfill, written in plain language, possibly with some suggested tools to use. It will also provide context about available the workflows state variables that you can update.
+        """
+        print(f"\n{'='*60}")
+        print(f"LeLamp: get_next_step called")
+        print(f"  Active workflow: {self.workflow_service.active_workflow}")
+        print(f"{'='*60}\n")
+
+        try:
+            if self.workflow_service.active_workflow is None:
+                return "Error: No active workflow. Call start_workflow first."
+
+            next_step = self.workflow_service.get_next_step()
+
+            print(f"\n{'='*60}")
+            print(f"LeLamp: get_next_step RESULT:")
+            print(f"{next_step}")
+            print(f"{'='*60}\n")
+
+            return next_step
+        except Exception as e:
+            error_msg = f"Error getting next step: {str(e)}"
+            print(f"[ERROR] {error_msg}")
+            import traceback
+
+            traceback.print_exc()
+            return error_msg
+
+    @function_tool
+    async def complete_step(
+        self, state_updates: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Complete the current workflow step and advance to the next one.
+        Optionally update state variables that affect workflow routing.
+
+        Args:
+            state_updates: Optional dict of state updates, e.g. {"user_response_detected": true, "attempt_count": 1}
+                          Leave empty if no state needs updating.
+
+        Returns:
+            Information about the next step or workflow completion message.
+        """
+        import json
+        import inspect
+
+        print(f"\n{'='*60}")
+        print(f"LeLamp: complete_step called")
+
+        # Debug: Check what we actually received
+        frame = inspect.currentframe()
+        if frame and frame.f_back:
+            local_vars = frame.f_back.f_locals
+            print(f"  All local variables: {list(local_vars.keys())}")
+            if "state_updates" in local_vars:
+                print(f"  state_updates from locals: {local_vars['state_updates']}")
+
+        print(f"  Raw state_updates parameter: {state_updates}")
+        print(f"  Type: {type(state_updates)}")
+        print(f"  Repr: {repr(state_updates)}")
+
+        # Handle case where state_updates might come as a string or need parsing
+        original_state_updates = state_updates
+        if state_updates is not None:
+            if isinstance(state_updates, str):
+                try:
+                    state_updates = json.loads(state_updates)
+                    print(f"  ✓ Parsed JSON string to dict: {state_updates}")
+                except json.JSONDecodeError as e:
+                    print(f"  ❌ Warning: Could not parse state_updates as JSON: {e}")
+                    print(f"     String value was: {repr(original_state_updates)}")
+                    state_updates = None
+        else:
+            print(
+                f"  ⚠️  state_updates is None - this might indicate LiveKit didn't parse the parameter"
+            )
+
+        print(f"  Final state_updates: {state_updates}")
+        print(f"{'='*60}\n")
+
+        try:
+            if self.workflow_service.active_workflow is None:
+                return "Error: No active workflow."
+
+            result = self.workflow_service.complete_step(state_updates)
+
+            print(f"\n{'='*60}")
+            print(f"LeLamp: complete_step RESULT:")
+            print(f"{result}")
+            print(f"{'='*60}\n")
+
+            return result
+        except Exception as e:
+            error_msg = f"Error completing step: {str(e)}"
+            print(f"[ERROR] {error_msg}")
+            import traceback
+
+            traceback.print_exc()
+            return error_msg
+
+    #####################################################################
+    # Create your own tools here.
+    #####################################################################
+
+    # Example tool: Get dummy calendar data
+    # @function_tool
+    # async def get_dummy_calendar_data(self) -> str:
+    #     f"""
+    #     Get dummy calendar data for the user. Call this function when you need to get the calendar data for the user.
+    #     """
+    #     print("LeLamp: calling get_dummy_calendar_data function")
+    #     try:
+    #         return {
+    #             "calendar_data": {
+    #                 "events": [
+    #                     {
+    #                         "title": "Meeting with John",
+    #                         "start_time": "2025-11-04T10:00:00Z",
+    #                         "end_time": "2025-11-04T11:00:00Z",
+    #                     },
+    #                     {
+    #                         "title": "Hot Yoga Session",
+    #                         "start_time": "2025-11-04T12:00:00Z",
+    #                         "end_time": "2025-11-04T13:00:00Z",
+    #                     },
+    #                 ]
+    #             }
+    #         }
+    #     except Exception as e:
+    #         result = f"Error getting dummy calendar data: {str(e)}"
+    #         return result
+
 
 # Entry to the agent
 async def entrypoint(ctx: agents.JobContext):
+    # Parse which workflows to preload
+    workflow_names = parse_workflow_args()
+
     agent = LeLamp(lamp_id="lelamp")
+
+    # Ensure agent instance is set (should already be set in __init__, but double-check)
+    if agent.workflow_service.agent_instance is None:
+        print("[MAIN] Warning: Agent instance not set, setting it now...")
+        agent.workflow_service.set_agent(agent)
+
+    # Preload workflow tools BEFORE creating the session
+    # LiveKit scans for tools when AgentSession is instantiated, so we must register before that
+    if workflow_names:
+        print(f"[MAIN] Preloading tools from workflows: {workflow_names}")
+    else:
+        print(f"[MAIN] Preloading tools from all available workflows")
+    agent.workflow_service.preload_workflow_tools(workflow_names)
 
     session = AgentSession(llm=openai.realtime.RealtimeModel(voice="ballad"))
 
