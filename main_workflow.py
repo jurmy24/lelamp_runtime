@@ -27,10 +27,10 @@ def parse_workflow_args():
     Usage:
         # Single workflow:
         WORKFLOWS=wake_up uv run main_workflow.py dev
-        
+
         # Multiple workflows:
         WORKFLOWS=wake_up,focus_session uv run main_workflow.py dev
-        
+
         # All workflows (if WORKFLOWS not set):
         uv run main_workflow.py dev
     """
@@ -431,38 +431,6 @@ Demo rules:
 
             traceback.print_exc()
             return error_msg
-
-    #####################################################################
-    # Create your own tools here.
-    #####################################################################
-
-    # Example tool: Get dummy calendar data
-    # @function_tool
-    # async def get_dummy_calendar_data(self) -> str:
-    #     f"""
-    #     Get dummy calendar data for the user. Call this function when you need to get the calendar data for the user.
-    #     """
-    #     print("LeLamp: calling get_dummy_calendar_data function")
-    #     try:
-    #         return {
-    #             "calendar_data": {
-    #                 "events": [
-    #                     {
-    #                         "title": "Meeting with John",
-    #                         "start_time": "2025-11-04T10:00:00Z",
-    #                         "end_time": "2025-11-04T11:00:00Z",
-    #                     },
-    #                     {
-    #                         "title": "Hot Yoga Session",
-    #                         "start_time": "2025-11-04T12:00:00Z",
-    #                         "end_time": "2025-11-04T13:00:00Z",
-    #                     },
-    #                 ]
-    #             }
-    #         }
-    #     except Exception as e:
-    #         result = f"Error getting dummy calendar data: {str(e)}"
-    #         return result
 
 
 # Entry to the agent
